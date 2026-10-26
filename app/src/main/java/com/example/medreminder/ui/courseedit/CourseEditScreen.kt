@@ -44,6 +44,8 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.medreminder.R
 import com.example.medreminder.domain.model.DrugReferenceOption
 import com.example.medreminder.domain.model.SavedDrugReference
+import com.example.medreminder.ui.components.StartDatePickerField
+import com.example.medreminder.ui.components.TimeOfDayPickerField
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -114,6 +116,11 @@ fun CourseEditScreen(
                 modifier = Modifier.fillMaxWidth(),
                 singleLine = true,
             )
+            StartDatePickerField(
+                isoDate = uiState.startDateIso,
+                onIsoDateChange = { value -> onFieldChange { it.copy(startDateIso = value) } },
+                label = { Text(stringResource(R.string.field_start_date)) },
+            )
             OutlinedTextField(
                 value = uiState.durationDays,
                 onValueChange = { value -> onFieldChange { it.copy(durationDays = value) } },
@@ -121,14 +128,6 @@ fun CourseEditScreen(
                 modifier = Modifier.fillMaxWidth(),
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                 singleLine = true,
-            )
-            OutlinedTextField(
-                value = uiState.startDateIso,
-                onValueChange = { value -> onFieldChange { it.copy(startDateIso = value) } },
-                label = { Text(stringResource(R.string.field_start_date)) },
-                modifier = Modifier.fillMaxWidth(),
-                singleLine = true,
-                supportingText = { Text(stringResource(R.string.field_start_date_hint)) },
             )
 
             Text(
@@ -140,7 +139,7 @@ fun CourseEditScreen(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
-                    OutlinedTextField(
+                    TimeOfDayPickerField(
                         value = time,
                         onValueChange = { value ->
                             onFieldChange { state ->
@@ -149,7 +148,6 @@ fun CourseEditScreen(
                         },
                         label = { Text(stringResource(R.string.field_time)) },
                         modifier = Modifier.weight(1f),
-                        singleLine = true,
                     )
                     if (uiState.times.size > 1) {
                         IconButton(onClick = { onRemoveTime(index) }) {

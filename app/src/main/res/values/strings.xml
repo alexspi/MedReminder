@@ -42,9 +42,11 @@
     <string name="field_dosage">Дозировка</string>
     <string name="field_duration_days">Сколько дней</string>
     <string name="field_start_date">Дата начала</string>
-    <string name="field_start_date_hint">ГГГГ-ММ-ДД</string>
+    <string name="field_start_date_hint">Нажмите, чтобы выбрать дату в календаре</string>
     <string name="field_times">Время приёма</string>
-    <string name="field_time">ЧЧ:ММ</string>
+    <string name="field_time">Время (часы : минуты)</string>
+    <string name="time_picker_confirm">Готово</string>
+    <string name="time_picker_cancel">Отмена</string>
     <string name="add_time">Добавить время</string>
     <string name="remove_time">Удалить время</string>
     <string name="field_notes">Примечания</string>
@@ -64,6 +66,8 @@
     <string name="exact_alarm_title">Точные напоминания</string>
     <string name="exact_alarm_message">Чтобы сигнал срабатывал вовремя, разрешите приложению ставить точные будильники в настройках.</string>
     <string name="open_settings">Настройки</string>
+    <string name="battery_opt_title">Работа в фоне</string>
+    <string name="battery_opt_message">На Realme и других телефонах без исключения из экономии батареи напоминания могут не срабатывать при выключенном экране. Разрешите приложению работать без ограничений.</string>
     <string name="grls_section_title">Справка из реестра</string>
     <string name="grls_load_button">Загрузить справку</string>
     <string name="grls_disclaimer">Справочная информация. Не заменяет назначение врача и инструкцию к препарату.</string>

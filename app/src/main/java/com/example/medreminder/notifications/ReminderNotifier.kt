@@ -47,11 +47,14 @@ object ReminderNotifier {
                     },
                 ),
             )
-            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setPriority(NotificationCompat.PRIORITY_MAX)
             .setCategory(NotificationCompat.CATEGORY_ALARM)
+            .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+            .setOnlyAlertOnce(false)
             .setAutoCancel(true)
             .setContentIntent(openApp)
             .setSound(sound)
+            .setVibrate(longArrayOf(0, 350, 200, 350))
             .addAction(0, context.getString(R.string.action_taken), taken)
             .addAction(0, context.getString(R.string.action_skip), skipped)
             .addAction(0, context.getString(R.string.action_snooze), snooze)

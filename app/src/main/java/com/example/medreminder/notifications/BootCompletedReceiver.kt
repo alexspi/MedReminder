@@ -10,10 +10,13 @@ import kotlinx.coroutines.launch
 
 class BootCompletedReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
-        if (intent.action != Intent.ACTION_BOOT_COMPLETED &&
-            intent.action != Intent.ACTION_TIMEZONE_CHANGED
-        ) {
-            return
+        when (intent.action) {
+            Intent.ACTION_BOOT_COMPLETED,
+            Intent.ACTION_TIMEZONE_CHANGED,
+            Intent.ACTION_TIME_CHANGED,
+            "android.intent.action.TIME_SET",
+            -> Unit
+            else -> return
         }
         val pending = goAsync()
         val app = context.applicationContext as MedReminderApplication
