@@ -14,8 +14,8 @@ android {
         applicationId = "com.example.medreminder"
         minSdk = 26
         targetSdk = 37
-        versionCode = 1
-        versionName = "0.0.1"
+        versionCode = 3
+        versionName = "0.0.3"
 
         val githubOwner = providers.gradleProperty("medreminder.githubOwner").orElse("").get()
         val githubRepo = providers.gradleProperty("medreminder.githubRepo").orElse("MedReminder").get()
@@ -28,9 +28,10 @@ android {
     buildTypes {
         release {
             signingConfig = signingConfigs.getByName("debug")
+            isMinifyEnabled = false
+            isShrinkResources = false
             optimization {
-                enable = true
-                packageScope = setOf("androidx.**", "kotlin.**", "kotlinx.**")
+                enable = false
             }
         }
     }

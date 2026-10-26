@@ -73,7 +73,11 @@ class MedReminderApplication : Application() {
         super.onCreate()
         NotificationChannels.ensureCreated(this)
         appScope.launch {
-            scheduler.rescheduleAll(repository)
+            try {
+                scheduler.rescheduleAll(repository)
+            } catch (_: Exception) {
+                // Не роняем запуск, если БД/будильники недоступны
+            }
         }
     }
 }
