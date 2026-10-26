@@ -38,6 +38,7 @@ fun SettingsScreen(
     onWeightChange: (String) -> Unit,
     onSaveProfile: () -> Unit,
     onCheckUpdates: () -> Unit,
+    onDownloadUpdate: () -> Unit,
 ) {
     val uiState by state.collectAsStateWithLifecycle()
 
@@ -74,6 +75,7 @@ fun SettingsScreen(
                 SettingsTab.UPDATE -> UpdateTab(
                     uiState = uiState,
                     onCheckUpdates = onCheckUpdates,
+                    onDownloadUpdate = onDownloadUpdate,
                 )
             }
         }
@@ -148,6 +150,7 @@ private fun PersonalTab(
 private fun UpdateTab(
     uiState: SettingsUiState,
     onCheckUpdates: () -> Unit,
+    onDownloadUpdate: () -> Unit,
 ) {
     Text(
         text = stringResource(R.string.settings_version_label, uiState.appVersionName),
@@ -160,13 +163,45 @@ private fun UpdateTab(
     )
     OutlinedButton(
         onClick = onCheckUpdates,
-        enabled = !uiState.isCheckingUpdate,
+        enabled = !uiState.isCheckingUpdate && !uiState.isDownloadingUpdate,
         modifier = Modifier.fillMaxWidth(),
     ) {
         if (uiState.isCheckingUpdate) {
             CircularProgressIndicator(strokeWidth = 2.dp, modifier = Modifier.padding(end = 8.dp))
         }
         Text(stringResource(R.string.settings_check_updates))
+    }
+    if (uiState.availableUpdate != null) {
+        Text(
+            text = stringResource(
+                R.string.settings_update_available,
+                uiState.availableUpdate!!.versionName,
+            ),
+            style = MaterialTheme.typography.titleSmall,
+        )
+        uiState.availableUpdate!!.releaseNotes?.let { notes ->
+            Text(
+                text = notes,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        Button(
+            onClick = onDownloadUpdate,
+            enabled = !uiState.isDownloadingUpdate,
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            if (uiState.isDownloadingUpdate) {
+                CircularProgressIndicator(strokeWidth = 2.dp, modifier = Modifier.padding(end = 8.dp))
+            }
+            val progress = uiState.downloadProgress
+            val label = if (uiState.isDownloadingUpdate && progress != null) {
+                stringResource(R.string.settings_downloading_update, (progress * 100).toInt())
+            } else {
+                stringResource(R.string.settings_download_install)
+            }
+            Text(label)
+        }
     }
     if (uiState.updateMessage != null) {
         Text(

@@ -15,8 +15,11 @@
     <string name="settings_weight">Вес (кг)</string>
     <string name="settings_save_profile">Сохранить</string>
     <string name="settings_version_label">Версия приложения: %1$s</string>
-    <string name="settings_update_hint">Проверка обновлений в магазине приложений (когда приложение будет опубликовано).</string>
+    <string name="settings_update_hint">Обновления с GitHub Releases. В каждом релизе нужны APK и файл version.json (см. папку release в репозитории).</string>
     <string name="settings_check_updates">Проверить обновления</string>
+    <string name="settings_update_available">Доступна версия %1$s</string>
+    <string name="settings_download_install">Скачать и установить</string>
+    <string name="settings_downloading_update">Загрузка… %1$d%%</string>
     <string name="calendar_title">Календарь приёмов</string>
     <string name="calendar_day_title">%1$s</string>
     <string name="calendar_day_empty">На этот день приёмов нет.</string>

@@ -159,10 +159,14 @@ fun MedReminderApp(repository: MedReminderRepository) {
                 )
             }
             composable(Routes.SETTINGS) {
+                val settingsContext = LocalContext.current
                 val vm: SettingsViewModel = viewModel(
                     factory = SettingsViewModel.factory(
                         app.userProfileRepository,
+                        app.appUpdateRepository,
+                        BuildConfig.VERSION_CODE,
                         BuildConfig.VERSION_NAME,
+                        settingsContext,
                     ),
                 )
                 SettingsScreen(
@@ -174,6 +178,7 @@ fun MedReminderApp(repository: MedReminderRepository) {
                     onWeightChange = vm::updateWeight,
                     onSaveProfile = vm::saveProfile,
                     onCheckUpdates = vm::checkForUpdates,
+                    onDownloadUpdate = vm::downloadAndInstallUpdate,
                 )
             }
             composable(

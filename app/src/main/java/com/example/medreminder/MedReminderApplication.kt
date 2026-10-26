@@ -12,6 +12,7 @@ import okhttp3.OkHttpClient
 import retrofit2.Retrofit
 import retrofit2.converter.gson.GsonConverterFactory
 import java.util.concurrent.TimeUnit
+import com.example.medreminder.update.GitHubAppUpdateRepository
 import com.example.medreminder.notifications.NotificationChannels
 import com.example.medreminder.notifications.ReminderScheduler
 import kotlinx.coroutines.CoroutineScope
@@ -32,6 +33,14 @@ class MedReminderApplication : Application() {
 
     val userProfileRepository: UserProfileRepository by lazy {
         UserProfileRepository(database)
+    }
+
+    val appUpdateRepository: GitHubAppUpdateRepository by lazy {
+        GitHubAppUpdateRepository(
+            context = this,
+            githubOwner = BuildConfig.GITHUB_OWNER,
+            githubRepo = BuildConfig.GITHUB_REPO,
+        )
     }
 
     val drugReferenceRepository: DrugReferenceRepository by lazy {
