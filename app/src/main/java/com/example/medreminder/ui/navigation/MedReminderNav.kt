@@ -34,6 +34,8 @@ import com.example.medreminder.ui.calendar.CalendarScreen
 import com.example.medreminder.ui.calendar.CalendarViewModel
 import com.example.medreminder.ui.courses.CoursesScreen
 import com.example.medreminder.ui.courses.CoursesViewModel
+import com.example.medreminder.domain.model.CourseKind
+import com.example.medreminder.ui.courseedit.CourseCreateTypeScreen
 import com.example.medreminder.ui.courseedit.CourseEditScreen
 import com.example.medreminder.ui.courseedit.CourseEditViewModel
 import com.example.medreminder.ui.history.HistoryScreen
@@ -51,14 +53,14 @@ object Routes {
     const val COURSES = "courses"
     const val SETTINGS = "settings"
     const val COURSE_EDIT = "course_edit"
+    const val COURSE_CREATE_TYPE = "course_create_type"
     const val COURSE_ID_ARG = "courseId"
+    const val COURSE_KIND_ARG = "courseKind"
 
-    fun courseEdit(courseId: Long?) =
-        if (courseId == null || courseId == 0L) {
-            "$COURSE_EDIT/0"
-        } else {
-            "$COURSE_EDIT/$courseId"
-        }
+    fun courseCreateType() = COURSE_CREATE_TYPE
+
+    fun courseEdit(courseId: Long, courseKind: CourseKind = CourseKind.MEDICATION): String =
+        "$COURSE_EDIT/$courseId/${courseKind.storageKey}"
 
     val mainDestinations = setOf(TODAY, CALENDAR, HISTORY, COURSES, SETTINGS)
 }
@@ -113,7 +115,7 @@ fun MedReminderApp(repository: MedReminderRepository) {
         floatingActionButton = {
             if (showFab) {
                 FloatingActionButton(
-                    onClick = { navController.navigate(Routes.courseEdit(null)) },
+                    onClick = { navController.navigate(Routes.courseCreateType()) },
                 ) {
                     Icon(Icons.Default.Add, contentDescription = stringResource(R.string.add_course))
                 }
@@ -129,7 +131,8 @@ fun MedReminderApp(repository: MedReminderRepository) {
                 val vm: TodayViewModel = viewModel(factory = TodayViewModel.factory(repository, app))
                 TodayScreen(
                     state = vm.uiState,
-                    onAddCourse = { navController.navigate(Routes.courseEdit(null)) },
+                    onAddCourse = { navController.navigate(Routes.courseCreateType()) },
+                    onEditCourse = { id -> navController.navigate(Routes.courseEdit(id)) },
                     onMarkTaken = vm::markTaken,
                     onMarkSkipped = vm::markSkipped,
                     onSnooze = vm::snooze,
@@ -155,7 +158,7 @@ fun MedReminderApp(repository: MedReminderRepository) {
                 val vm: CoursesViewModel = viewModel(factory = CoursesViewModel.factory(repository))
                 CoursesScreen(
                     state = vm.uiState,
-                    onEditCourse = { id -> navController.navigate(Routes.courseEdit(id)) },
+                    onEditCourse = { id, kind -> navController.navigate(Routes.courseEdit(id, kind)) },
                 )
             }
             composable(Routes.SETTINGS) {
@@ -181,22 +184,44 @@ fun MedReminderApp(repository: MedReminderRepository) {
                     onDownloadUpdate = vm::downloadAndInstallUpdate,
                 )
             }
+            composable(Routes.COURSE_CREATE_TYPE) {
+                CourseCreateTypeScreen(
+                    onSelectKind = { kind ->
+                        navController.navigate(Routes.courseEdit(0L, kind)) {
+                            popUpTo(Routes.COURSE_CREATE_TYPE) { inclusive = true }
+                        }
+                    },
+                    onBack = { navController.popBackStack() },
+                )
+            }
             composable(
-                route = "${Routes.COURSE_EDIT}/{${Routes.COURSE_ID_ARG}}",
+                route = "${Routes.COURSE_EDIT}/{${Routes.COURSE_ID_ARG}}/{${Routes.COURSE_KIND_ARG}}",
                 arguments = listOf(
                     navArgument(Routes.COURSE_ID_ARG) {
                         type = NavType.LongType
                         defaultValue = 0L
                     },
+                    navArgument(Routes.COURSE_KIND_ARG) {
+                        type = NavType.StringType
+                        defaultValue = CourseKind.MEDICATION.storageKey
+                    },
                 ),
             ) { entry ->
                 val courseId = entry.arguments?.getLong(Routes.COURSE_ID_ARG) ?: 0L
+                val kindKey = entry.arguments?.getString(Routes.COURSE_KIND_ARG)
+                val initialKind = CourseKind.fromStorage(kindKey)
                 val vm: CourseEditViewModel = viewModel(
-                    factory = CourseEditViewModel.factory(repository, app.drugReferenceRepository, courseId),
+                    factory = CourseEditViewModel.factory(
+                        repository,
+                        app.drugReferenceRepository,
+                        courseId,
+                        initialKind,
+                    ),
                 )
                 CourseEditScreen(
                     state = vm.uiState,
                     onFieldChange = vm::updateField,
+                    onUnitsInPackageChange = vm::updateUnitsInPackage,
                     onAddTime = vm::addTimeSlot,
                     onRemoveTime = vm::removeTimeSlot,
                     onSoundSelected = vm::setSoundUri,

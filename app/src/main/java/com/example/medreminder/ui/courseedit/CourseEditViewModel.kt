@@ -5,6 +5,7 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.example.medreminder.data.DrugReferenceRepository
 import com.example.medreminder.data.MedReminderRepository
+import com.example.medreminder.domain.model.CourseKind
 import com.example.medreminder.domain.model.DrugReferenceOption
 import com.example.medreminder.domain.model.MedicationCourse
 import com.example.medreminder.domain.model.SavedDrugReference
@@ -20,6 +21,7 @@ import java.time.format.DateTimeParseException
 
 data class CourseEditUiState(
     val courseId: Long = 0,
+    val courseKind: CourseKind = CourseKind.MEDICATION,
     val name: String = "",
     val dosage: String = "",
     val durationDays: String = "7",
@@ -37,14 +39,20 @@ data class CourseEditUiState(
     val referenceSourceLabel: String? = null,
     val selectedOptionId: String? = null,
     val savedReference: SavedDrugReference? = null,
+    val unitsInPackage: String = "",
+    val unitsPerDose: String = "1",
+    val remainingUnits: String = "",
 )
 
 class CourseEditViewModel(
     private val repository: MedReminderRepository,
     private val drugReferenceRepository: DrugReferenceRepository,
     private val courseId: Long,
+    private val initialCourseKind: CourseKind,
 ) : ViewModel() {
-    private val _uiState = MutableStateFlow(CourseEditUiState(courseId = courseId))
+    private val _uiState = MutableStateFlow(
+        CourseEditUiState(courseId = courseId, courseKind = initialCourseKind),
+    )
     val uiState: StateFlow<CourseEditUiState> = _uiState.asStateFlow()
 
     init {
@@ -54,6 +62,7 @@ class CourseEditViewModel(
                 if (course != null) {
                     _uiState.update {
                         it.copy(
+                            courseKind = course.courseKind,
                             name = course.name,
                             dosage = course.dosage,
                             durationDays = course.durationDays.toString(),
@@ -63,6 +72,9 @@ class CourseEditViewModel(
                             soundUri = course.soundUri,
                             savedReference = course.savedReference,
                             selectedOptionId = course.savedReference?.optionId,
+                            unitsInPackage = if (course.unitsInPackage > 0) course.unitsInPackage.toString() else "",
+                            unitsPerDose = course.unitsPerDose.toString(),
+                            remainingUnits = course.remainingUnits.toString(),
                             isLoaded = true,
                         )
                     }
@@ -77,6 +89,20 @@ class CourseEditViewModel(
 
     fun updateField(block: (CourseEditUiState) -> CourseEditUiState) {
         _uiState.update(block)
+    }
+
+    fun updateUnitsInPackage(value: String) {
+        _uiState.update { state ->
+            val packageCount = value.trim().toIntOrNull()
+            val remaining = when {
+                state.courseId == 0L && packageCount != null && packageCount > 0 ->
+                    packageCount.toString()
+                state.courseId == 0L && value.isBlank() ->
+                    ""
+                else -> state.remainingUnits
+            }
+            state.copy(unitsInPackage = value, remainingUnits = remaining)
+        }
     }
 
     fun addTimeSlot() {
@@ -96,9 +122,15 @@ class CourseEditViewModel(
     }
 
     fun loadGrlsReference() {
-        val name = _uiState.value.name.trim()
+        val state = _uiState.value
+        if (!state.courseKind.showsDrugReference) return
+        val name = state.name.trim()
         if (name.isBlank()) {
-            _uiState.update { it.copy(grlsError = "Сначала укажите название лекарства") }
+            val message = when (state.courseKind) {
+                CourseKind.SUPPLEMENT -> "Сначала укажите название БАД"
+                else -> "Сначала укажите название лекарства"
+            }
+            _uiState.update { it.copy(grlsError = message) }
             return
         }
         viewModelScope.launch {
@@ -112,7 +144,11 @@ class CourseEditViewModel(
                 )
             }
             try {
-                val result = drugReferenceRepository.fetchDrugReferenceOptions(name)
+                val result = when (state.courseKind) {
+                    CourseKind.SUPPLEMENT -> drugReferenceRepository.fetchSupplementReferenceOptions(name)
+                    CourseKind.MEDICATION -> drugReferenceRepository.fetchDrugReferenceOptions(name)
+                    CourseKind.PLANNED_ACTION -> throw IllegalStateException()
+                }
                 val preselect = result.options.firstOrNull()?.id
                 _uiState.update {
                     it.copy(
@@ -188,10 +224,16 @@ class CourseEditViewModel(
 
     private fun parseCourse(state: CourseEditUiState): MedicationCourse? {
         if (state.name.isBlank()) {
-            _uiState.update { it.copy(errorMessage = "Укажите название лекарства") }
+            val message = when (state.courseKind) {
+                CourseKind.PLANNED_ACTION -> "Укажите название действия"
+                CourseKind.SUPPLEMENT -> "Укажите название БАД"
+                CourseKind.MEDICATION -> "Укажите название лекарства"
+            }
+            _uiState.update { it.copy(errorMessage = message) }
             return null
         }
-        if (state.dosage.isBlank()) {
+        val dosage = state.dosage.trim()
+        if (state.courseKind.showsDosageAndStock && dosage.isBlank()) {
             _uiState.update { it.copy(errorMessage = "Укажите дозировку") }
             return null
         }
@@ -219,17 +261,49 @@ class CourseEditViewModel(
             _uiState.update { it.copy(errorMessage = "Добавьте хотя бы одно время приёма") }
             return null
         }
+        val packageUnits: Int
+        val perDose: Int
+        val remainingUnits: Int
+        if (state.courseKind.showsDosageAndStock) {
+            packageUnits = state.unitsInPackage.trim().toIntOrNull() ?: 0
+            val perDoseParsed = state.unitsPerDose.trim().toIntOrNull()
+            if (packageUnits > 0) {
+                if (perDoseParsed == null || perDoseParsed < 1) {
+                    _uiState.update { it.copy(errorMessage = "Количество на приём должно быть ≥ 1") }
+                    return null
+                }
+            }
+            val remainingParsed = state.remainingUnits.trim().toIntOrNull()
+            remainingUnits = when {
+                packageUnits <= 0 -> 0
+                remainingParsed != null -> remainingParsed.coerceIn(0, packageUnits)
+                else -> packageUnits
+            }
+            if (packageUnits > 0 && remainingUnits > packageUnits) {
+                _uiState.update { it.copy(errorMessage = "Остаток не может быть больше упаковки") }
+                return null
+            }
+            perDose = (perDoseParsed ?: 1).coerceAtLeast(1)
+        } else {
+            packageUnits = 0
+            perDose = 1
+            remainingUnits = 0
+        }
         return MedicationCourse(
             id = state.courseId,
+            courseKind = state.courseKind,
             name = state.name,
-            dosage = state.dosage,
+            dosage = if (state.courseKind.showsDosageAndStock) dosage else "",
             startDate = startDate,
             durationDays = days,
             timesOfDay = times,
             notes = state.notes,
             soundUri = state.soundUri,
             isActive = true,
-            savedReference = state.savedReference,
+            savedReference = if (state.courseKind.showsDrugReference) state.savedReference else null,
+            unitsInPackage = packageUnits,
+            unitsPerDose = perDose,
+            remainingUnits = remainingUnits,
         )
     }
 
@@ -238,11 +312,17 @@ class CourseEditViewModel(
             repository: MedReminderRepository,
             drugReferenceRepository: DrugReferenceRepository,
             courseId: Long,
+            initialCourseKind: CourseKind,
         ): ViewModelProvider.Factory =
             object : ViewModelProvider.Factory {
                 @Suppress("UNCHECKED_CAST")
                 override fun <T : ViewModel> create(modelClass: Class<T>): T =
-                    CourseEditViewModel(repository, drugReferenceRepository, courseId) as T
+                    CourseEditViewModel(
+                        repository,
+                        drugReferenceRepository,
+                        courseId,
+                        initialCourseKind,
+                    ) as T
             }
     }
 }

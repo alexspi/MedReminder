@@ -42,6 +42,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.medreminder.R
+import com.example.medreminder.domain.model.CourseKind
 import com.example.medreminder.domain.model.DrugReferenceOption
 import com.example.medreminder.domain.model.SavedDrugReference
 import com.example.medreminder.ui.components.StartDatePickerField
@@ -52,6 +53,7 @@ import com.example.medreminder.ui.components.TimeOfDayPickerField
 fun CourseEditScreen(
     state: kotlinx.coroutines.flow.StateFlow<CourseEditUiState>,
     onFieldChange: ((CourseEditUiState) -> CourseEditUiState) -> Unit,
+    onUnitsInPackageChange: (String) -> Unit,
     onAddTime: () -> Unit,
     onRemoveTime: (Int) -> Unit,
     onSoundSelected: (String?) -> Unit,
@@ -64,6 +66,9 @@ fun CourseEditScreen(
 ) {
     val uiState by state.collectAsStateWithLifecycle()
     val isNew = uiState.courseId == 0L
+    val showMedFields = uiState.courseKind.showsDosageAndStock
+    val showReference = uiState.courseKind.showsDrugReference
+    val screenTitle = courseEditTitle(isNew, uiState.courseKind)
 
     val ringtonePicker = rememberLauncherForActivityResult(
         ActivityResultContracts.StartActivityForResult(),
@@ -80,12 +85,7 @@ fun CourseEditScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = {
-                    Text(
-                        if (isNew) stringResource(R.string.course_edit_new)
-                        else stringResource(R.string.course_edit_title),
-                    )
-                },
+                title = { Text(screenTitle) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = null)
@@ -105,17 +105,53 @@ fun CourseEditScreen(
             OutlinedTextField(
                 value = uiState.name,
                 onValueChange = { value -> onFieldChange { it.copy(name = value) } },
-                label = { Text(stringResource(R.string.field_name)) },
+                label = {
+                    Text(
+                        when (uiState.courseKind) {
+                            CourseKind.PLANNED_ACTION -> stringResource(R.string.field_action_name)
+                            CourseKind.SUPPLEMENT -> stringResource(R.string.field_supplement_name)
+                            CourseKind.MEDICATION -> stringResource(R.string.field_name)
+                        },
+                    )
+                },
                 modifier = Modifier.fillMaxWidth(),
                 singleLine = true,
             )
-            OutlinedTextField(
-                value = uiState.dosage,
-                onValueChange = { value -> onFieldChange { it.copy(dosage = value) } },
-                label = { Text(stringResource(R.string.field_dosage)) },
-                modifier = Modifier.fillMaxWidth(),
-                singleLine = true,
-            )
+            if (showMedFields) {
+                OutlinedTextField(
+                    value = uiState.dosage,
+                    onValueChange = { value -> onFieldChange { it.copy(dosage = value) } },
+                    label = { Text(stringResource(R.string.field_dosage)) },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                )
+                OutlinedTextField(
+                    value = uiState.unitsInPackage,
+                    onValueChange = onUnitsInPackageChange,
+                    label = { Text(stringResource(R.string.field_units_in_package)) },
+                    modifier = Modifier.fillMaxWidth(),
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    singleLine = true,
+                    supportingText = { Text(stringResource(R.string.field_units_in_package_hint)) },
+                )
+                OutlinedTextField(
+                    value = uiState.unitsPerDose,
+                    onValueChange = { value -> onFieldChange { it.copy(unitsPerDose = value) } },
+                    label = { Text(stringResource(R.string.field_units_per_dose)) },
+                    modifier = Modifier.fillMaxWidth(),
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    singleLine = true,
+                )
+                OutlinedTextField(
+                    value = uiState.remainingUnits,
+                    onValueChange = { value -> onFieldChange { it.copy(remainingUnits = value) } },
+                    label = { Text(stringResource(R.string.field_remaining_units)) },
+                    modifier = Modifier.fillMaxWidth(),
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    singleLine = true,
+                    supportingText = { Text(stringResource(R.string.field_remaining_units_hint)) },
+                )
+            }
             StartDatePickerField(
                 isoDate = uiState.startDateIso,
                 onIsoDateChange = { value -> onFieldChange { it.copy(startDateIso = value) } },
@@ -131,7 +167,11 @@ fun CourseEditScreen(
             )
 
             Text(
-                text = stringResource(R.string.field_times),
+                text = if (uiState.courseKind == CourseKind.PLANNED_ACTION) {
+                    stringResource(R.string.field_times_action)
+                } else {
+                    stringResource(R.string.field_times)
+                },
                 style = MaterialTheme.typography.titleSmall,
             )
             uiState.times.forEachIndexed { index, time ->
@@ -190,71 +230,79 @@ fun CourseEditScreen(
                 minLines = 2,
             )
 
-            Text(
-                text = stringResource(R.string.grls_section_title),
-                style = MaterialTheme.typography.titleSmall,
-            )
-            OutlinedButton(
-                onClick = onLoadGrls,
-                enabled = !uiState.grlsLoading,
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                if (uiState.grlsLoading) {
-                    CircularProgressIndicator(
-                        modifier = Modifier.padding(end = 8.dp),
-                        strokeWidth = 2.dp,
+            if (showReference) {
+                Text(
+                    text = stringResource(
+                        if (uiState.courseKind == CourseKind.SUPPLEMENT) {
+                            R.string.bad_section_title
+                        } else {
+                            R.string.grls_section_title
+                        },
+                    ),
+                    style = MaterialTheme.typography.titleSmall,
+                )
+                OutlinedButton(
+                    onClick = onLoadGrls,
+                    enabled = !uiState.grlsLoading,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    if (uiState.grlsLoading) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.padding(end = 8.dp),
+                            strokeWidth = 2.dp,
+                        )
+                    }
+                    Text(stringResource(R.string.grls_load_button))
+                }
+                if (uiState.savedReference != null) {
+                    SavedReferenceCard(reference = uiState.savedReference!!)
+                }
+                if (uiState.grlsError != null) {
+                    Text(
+                        text = uiState.grlsError!!,
+                        color = MaterialTheme.colorScheme.error,
+                        style = MaterialTheme.typography.bodyMedium,
                     )
                 }
-                Text(stringResource(R.string.grls_load_button))
-            }
-            if (uiState.savedReference != null) {
-                SavedReferenceCard(reference = uiState.savedReference!!)
-            }
-            if (uiState.grlsError != null) {
+                if (uiState.referenceNotice != null) {
+                    Text(
+                        text = uiState.referenceNotice!!,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                if (uiState.referenceSourceLabel != null && uiState.referenceOptions.isNotEmpty()) {
+                    Text(
+                        text = stringResource(R.string.grls_source, uiState.referenceSourceLabel!!),
+                        style = MaterialTheme.typography.labelSmall,
+                    )
+                }
+                uiState.referenceOptions.forEach { option ->
+                    ReferenceOptionCard(
+                        option = option,
+                        selected = option.id == uiState.selectedOptionId,
+                        onSelect = { onSelectReference(option.id) },
+                    )
+                }
+                if (uiState.referenceOptions.isNotEmpty()) {
+                    Button(
+                        onClick = onSaveReference,
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Text(stringResource(R.string.grls_save_selection))
+                    }
+                }
+                if (uiState.savedReference != null || uiState.referenceOptions.isNotEmpty()) {
+                    TextButton(onClick = onClearGrls) {
+                        Text(stringResource(R.string.grls_clear))
+                    }
+                }
                 Text(
-                    text = uiState.grlsError!!,
-                    color = MaterialTheme.colorScheme.error,
-                    style = MaterialTheme.typography.bodyMedium,
-                )
-            }
-            if (uiState.referenceNotice != null) {
-                Text(
-                    text = uiState.referenceNotice!!,
-                    style = MaterialTheme.typography.bodySmall,
+                    text = stringResource(R.string.grls_disclaimer),
+                    style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
-            if (uiState.referenceSourceLabel != null && uiState.referenceOptions.isNotEmpty()) {
-                Text(
-                    text = stringResource(R.string.grls_source, uiState.referenceSourceLabel!!),
-                    style = MaterialTheme.typography.labelSmall,
-                )
-            }
-            uiState.referenceOptions.forEach { option ->
-                ReferenceOptionCard(
-                    option = option,
-                    selected = option.id == uiState.selectedOptionId,
-                    onSelect = { onSelectReference(option.id) },
-                )
-            }
-            if (uiState.referenceOptions.isNotEmpty()) {
-                Button(
-                    onClick = onSaveReference,
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Text(stringResource(R.string.grls_save_selection))
-                }
-            }
-            if (uiState.savedReference != null || uiState.referenceOptions.isNotEmpty()) {
-                TextButton(onClick = onClearGrls) {
-                    Text(stringResource(R.string.grls_clear))
-                }
-            }
-            Text(
-                text = stringResource(R.string.grls_disclaimer),
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
 
             if (uiState.errorMessage != null) {
                 Text(
@@ -272,6 +320,18 @@ fun CourseEditScreen(
                 Text(stringResource(R.string.save_course))
             }
         }
+    }
+}
+
+@Composable
+private fun courseEditTitle(isNew: Boolean, kind: CourseKind): String {
+    return when {
+        isNew && kind == CourseKind.MEDICATION -> stringResource(R.string.course_edit_new_medication)
+        isNew && kind == CourseKind.SUPPLEMENT -> stringResource(R.string.course_edit_new_supplement)
+        isNew && kind == CourseKind.PLANNED_ACTION -> stringResource(R.string.course_edit_new_action)
+        kind == CourseKind.PLANNED_ACTION -> stringResource(R.string.course_edit_action)
+        kind == CourseKind.SUPPLEMENT -> stringResource(R.string.course_edit_supplement)
+        else -> stringResource(R.string.course_edit_title)
     }
 }
 

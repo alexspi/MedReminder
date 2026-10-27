@@ -13,6 +13,7 @@ import com.example.medreminder.R
 
 object NotificationChannels {
     const val REMINDERS = "med_reminders_alarm_v2"
+    const val STOCK = "med_stock_alarm_v1"
 
     fun ensureCreated(context: Context) {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
@@ -30,6 +31,29 @@ object NotificationChannels {
             description = context.getString(R.string.notification_channel_desc)
             enableVibration(true)
             vibrationPattern = longArrayOf(0, 350, 200, 350)
+            setSound(alarmSound, audioAttributes)
+            lockscreenVisibility = Notification.VISIBILITY_PUBLIC
+            setBypassDnd(true)
+        }
+        manager.createNotificationChannel(channel)
+    }
+
+    fun ensureStockChannel(context: Context) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
+        val manager = context.getSystemService(NotificationManager::class.java)
+        val alarmSound: Uri = Settings.System.DEFAULT_ALARM_ALERT_URI
+        val audioAttributes = AudioAttributes.Builder()
+            .setUsage(AudioAttributes.USAGE_ALARM)
+            .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+            .build()
+        val channel = NotificationChannel(
+            STOCK,
+            context.getString(R.string.stock_notification_channel_name),
+            NotificationManager.IMPORTANCE_HIGH,
+        ).apply {
+            description = context.getString(R.string.stock_notification_channel_desc)
+            enableVibration(true)
+            vibrationPattern = longArrayOf(0, 300, 150, 300)
             setSound(alarmSound, audioAttributes)
             lockscreenVisibility = Notification.VISIBILITY_PUBLIC
             setBypassDnd(true)

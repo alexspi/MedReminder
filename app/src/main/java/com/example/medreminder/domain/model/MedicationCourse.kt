@@ -7,6 +7,7 @@ import java.time.LocalTime
 
 data class MedicationCourse(
     val id: Long = 0,
+    val courseKind: CourseKind = CourseKind.MEDICATION,
     val name: String,
     val dosage: String,
     val startDate: LocalDate,
@@ -16,6 +17,9 @@ data class MedicationCourse(
     val soundUri: String?,
     val isActive: Boolean = true,
     val savedReference: SavedDrugReference? = null,
+    val unitsInPackage: Int = 0,
+    val unitsPerDose: Int = 1,
+    val remainingUnits: Int = 0,
 ) {
     fun toEntity(): MedicationCourseEntity =
         MedicationCourseEntity(
@@ -35,6 +39,10 @@ data class MedicationCourse(
             referenceStatus = savedReference?.status,
             referenceFormsSummary = savedReference?.dosageFormsSummary,
             referenceSourceLabel = savedReference?.sourceLabel,
+            unitsInPackage = unitsInPackage,
+            unitsPerDose = unitsPerDose,
+            remainingUnits = remainingUnits,
+            courseKind = courseKind.storageKey,
         )
 
     companion object {
@@ -52,6 +60,7 @@ data class MedicationCourse(
             }
             return MedicationCourse(
                 id = entity.id,
+                courseKind = CourseKind.fromStorage(entity.courseKind),
                 name = entity.name,
                 dosage = entity.dosage,
                 startDate = LocalDate.ofEpochDay(entity.startDateEpochDay),
@@ -61,6 +70,9 @@ data class MedicationCourse(
                 soundUri = entity.soundUri,
                 isActive = entity.isActive,
                 savedReference = saved,
+                unitsInPackage = entity.unitsInPackage,
+                unitsPerDose = entity.unitsPerDose,
+                remainingUnits = entity.remainingUnits,
             )
         }
     }

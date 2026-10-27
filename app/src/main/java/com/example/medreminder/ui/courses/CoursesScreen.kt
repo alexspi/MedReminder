@@ -22,6 +22,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.medreminder.R
+import com.example.medreminder.domain.model.CourseKind
 import com.example.medreminder.domain.model.MedicationCourse
 import java.time.format.DateTimeFormatter
 import java.util.Locale
@@ -32,7 +33,7 @@ private val dateFormatter = DateTimeFormatter.ofPattern("d MMM yyyy", Locale.for
 @Composable
 fun CoursesScreen(
     state: kotlinx.coroutines.flow.StateFlow<CoursesUiState>,
-    onEditCourse: (Long) -> Unit,
+    onEditCourse: (Long, CourseKind) -> Unit,
 ) {
     val uiState by state.collectAsStateWithLifecycle()
 
@@ -60,7 +61,7 @@ fun CoursesScreen(
                     )
                 }
                 items(uiState.active, key = { it.id }) { course ->
-                    CourseCard(course = course, onClick = { onEditCourse(course.id) })
+                    CourseCard(course = course, onClick = { onEditCourse(course.id, course.courseKind) })
                 }
             }
             if (uiState.completed.isNotEmpty()) {
@@ -73,7 +74,7 @@ fun CoursesScreen(
                     )
                 }
                 items(uiState.completed, key = { it.id }) { course ->
-                    CourseCard(course = course, onClick = { onEditCourse(course.id) })
+                    CourseCard(course = course, onClick = { onEditCourse(course.id, course.courseKind) })
                 }
             }
         }
@@ -89,12 +90,19 @@ private fun CourseCard(course: MedicationCourse, onClick: () -> Unit) {
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
-            Text(text = course.name, style = MaterialTheme.typography.titleMedium)
             Text(
-                text = course.dosage,
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                text = courseKindLabel(course.courseKind),
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.primary,
             )
+            Text(text = course.name, style = MaterialTheme.typography.titleMedium)
+            if (course.courseKind.showsDosageAndStock && course.dosage.isNotBlank()) {
+                Text(
+                    text = course.dosage,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
             course.savedReference?.let { ref ->
                 Text(
                     text = stringResource(R.string.course_saved_reference, ref.displayLine()),
@@ -116,3 +124,11 @@ private fun CourseCard(course: MedicationCourse, onClick: () -> Unit) {
         }
     }
 }
+
+@Composable
+private fun courseKindLabel(kind: CourseKind): String =
+    when (kind) {
+        CourseKind.MEDICATION -> stringResource(R.string.course_kind_medication)
+        CourseKind.SUPPLEMENT -> stringResource(R.string.course_kind_supplement)
+        CourseKind.PLANNED_ACTION -> stringResource(R.string.course_kind_planned_action)
+    }

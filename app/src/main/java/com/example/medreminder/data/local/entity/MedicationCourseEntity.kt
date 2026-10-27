@@ -23,4 +23,10 @@ data class MedicationCourseEntity(
     val referenceStatus: String? = null,
     val referenceFormsSummary: String? = null,
     val referenceSourceLabel: String? = null,
+    /** 0 = inventory tracking disabled */
+    val unitsInPackage: Int = 0,
+    val unitsPerDose: Int = 1,
+    val remainingUnits: Int = 0,
+    /** @see com.example.medreminder.domain.model.CourseKind.storageKey */
+    val courseKind: String = "medication",
 )

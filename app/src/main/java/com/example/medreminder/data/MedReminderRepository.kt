@@ -5,9 +5,11 @@ import com.example.medreminder.data.local.DoseStatus
 import com.example.medreminder.data.local.entity.DoseEventEntity
 import com.example.medreminder.data.local.entity.MedicationCourseEntity
 import com.example.medreminder.domain.DoseScheduleGenerator
+import com.example.medreminder.domain.StockSupplyCalculator
 import com.example.medreminder.domain.model.DoseEvent
 import com.example.medreminder.domain.model.DoseWithCourse
 import com.example.medreminder.domain.model.MedicationCourse
+import com.example.medreminder.domain.model.StockAlert
 import com.example.medreminder.notifications.ReminderScheduler
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
@@ -26,6 +28,11 @@ class MedReminderRepository(
 
     fun observeCourses(): Flow<List<MedicationCourse>> =
         courseDao.observeAll().map { list -> list.map(MedicationCourse::fromEntity) }
+
+    fun observeStockAlerts(): Flow<List<StockAlert>> =
+        observeCourses().map { courses ->
+            courses.mapNotNull { course -> course.toStockAlertOrNull() }
+        }
 
     suspend fun getCourse(id: Long): MedicationCourse? =
         courseDao.getById(id)?.let(MedicationCourse::fromEntity)
@@ -105,9 +112,11 @@ class MedReminderRepository(
         scheduler.rescheduleAll(this)
     }
 
-    suspend fun markTaken(doseId: Long) {
+    suspend fun markTaken(doseId: Long): MedicationCourse? {
+        val item = getDoseWithCourse(doseId) ?: return null
         updateStatus(doseId, DoseStatus.TAKEN, takenAt = LocalDateTime.now())
         scheduler.cancel(doseId)
+        return applyStockAfterTaken(item.course)
     }
 
     suspend fun markSkipped(doseId: Long) {
@@ -128,6 +137,15 @@ class MedReminderRepository(
         scheduler.schedule(DoseEvent.fromEntity(updated))
     }
 
+    private suspend fun applyStockAfterTaken(course: MedicationCourse): MedicationCourse {
+        if (!StockSupplyCalculator.tracksInventory(course)) return course
+        val newRemaining = (course.remainingUnits - course.unitsPerDose).coerceAtLeast(0)
+        if (newRemaining == course.remainingUnits) return course
+        val updated = course.copy(remainingUnits = newRemaining)
+        courseDao.update(updated.toEntity())
+        return updated
+    }
+
     private suspend fun updateStatus(doseId: Long, status: DoseStatus, takenAt: LocalDateTime?) {
         val entity = doseDao.getById(doseId) ?: return
         val takenMillis = takenAt?.atZone(zone)?.toInstant()?.toEpochMilli()
@@ -142,4 +160,19 @@ class MedReminderRepository(
     companion object {
         const val SNOOZE_MINUTES = 10L
     }
+}
+
+private fun MedicationCourse.toStockAlertOrNull(): StockAlert? {
+    if (!StockSupplyCalculator.tracksInventory(this)) return null
+    val depleted = StockSupplyCalculator.isDepleted(this)
+    val low = StockSupplyCalculator.isLowSupply(this)
+    if (!depleted && !low) return null
+    val daysLeft = StockSupplyCalculator.daysOfSupplyRemaining(this) ?: 0
+    return StockAlert(
+        courseId = id,
+        courseName = name,
+        remainingUnits = remainingUnits,
+        daysOfSupplyLeft = daysLeft,
+        depleted = depleted,
+    )
 }

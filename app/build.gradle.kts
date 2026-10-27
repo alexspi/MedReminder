@@ -14,8 +14,8 @@ android {
         applicationId = "com.example.medreminder"
         minSdk = 26
         targetSdk = 37
-        versionCode = 4
-        versionName = "0.0.4"
+        versionCode = 5
+        versionName = "0.0.5"
 
         val githubOwner = providers.gradleProperty("medreminder.githubOwner").orElse("").get()
         val githubRepo = providers.gradleProperty("medreminder.githubRepo").orElse("MedReminder").get()

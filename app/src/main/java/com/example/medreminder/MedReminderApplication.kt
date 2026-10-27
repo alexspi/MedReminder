@@ -5,6 +5,7 @@ import com.example.medreminder.data.DrugReferenceRepository
 import com.example.medreminder.data.MedReminderRepository
 import com.example.medreminder.data.UserProfileRepository
 import com.example.medreminder.data.local.AppDatabase
+import com.example.medreminder.data.remote.BadRecordsApi
 import com.example.medreminder.data.remote.GrlsApi
 import com.example.medreminder.data.remote.WikipediaReferenceDataSource
 import com.google.gson.GsonBuilder
@@ -64,7 +65,8 @@ class MedReminderApplication : Application() {
             .addConverterFactory(GsonConverterFactory.create(GsonBuilder().create()))
             .build()
         DrugReferenceRepository(
-            api = retrofit.create(GrlsApi::class.java),
+            grlsApi = retrofit.create(GrlsApi::class.java),
+            badApi = retrofit.create(BadRecordsApi::class.java),
             wikipedia = WikipediaReferenceDataSource(client),
         )
     }
