@@ -8,5 +8,11 @@ interface GrlsApi {
     suspend fun search(
         @Query("q") query: String,
         @Query("limit") limit: Int = 5,
+        @Query("status") status: String = "",
     ): GrlsSearchResponse
+
+    @GET("api/drug-suggestions")
+    suspend fun suggestions(
+        @Query("q") query: String,
+    ): GrlsSuggestionsResponse
 }

@@ -5,8 +5,8 @@ import com.example.medreminder.data.DrugReferenceRepository
 import com.example.medreminder.data.MedReminderRepository
 import com.example.medreminder.data.UserProfileRepository
 import com.example.medreminder.data.local.AppDatabase
-import com.example.medreminder.data.remote.BadRecordsApi
 import com.example.medreminder.data.remote.GrlsApi
+import com.example.medreminder.data.remote.VidalParapharmReferenceDataSource
 import com.example.medreminder.data.remote.WikipediaReferenceDataSource
 import com.google.gson.GsonBuilder
 import okhttp3.OkHttpClient
@@ -66,7 +66,7 @@ class MedReminderApplication : Application() {
             .build()
         DrugReferenceRepository(
             grlsApi = retrofit.create(GrlsApi::class.java),
-            badApi = retrofit.create(BadRecordsApi::class.java),
+            vidalParapharm = VidalParapharmReferenceDataSource(client),
             wikipedia = WikipediaReferenceDataSource(client),
         )
     }

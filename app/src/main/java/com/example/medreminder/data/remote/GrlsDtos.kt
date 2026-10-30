@@ -8,6 +8,11 @@ data class GrlsSearchResponse(
     @SerializedName("items") val items: List<GrlsRecordDto>?,
 )
 
+data class GrlsSuggestionsResponse(
+    @SerializedName("query") val query: String?,
+    @SerializedName("items") val items: List<String>?,
+)
+
 data class GrlsRecordDto(
     @SerializedName("id") val id: Long?,
     @SerializedName("status") val status: String?,

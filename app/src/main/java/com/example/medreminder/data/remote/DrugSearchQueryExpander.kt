@@ -20,6 +20,10 @@ object DrugSearchQueryExpander {
                 variants += words.take(2).joinToString(" ")
             }
         }
+        val compact = normalized.replace(" ", "")
+        if (compact.length >= 4) {
+            variants += compact
+        }
         if (normalized.length >= 5) {
             variants += normalized.dropLast(1)
         }

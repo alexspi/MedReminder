@@ -2,9 +2,9 @@ package com.example.medreminder.data
 
 import com.example.medreminder.data.remote.DrugSearchQueryExpander
 import com.example.medreminder.data.remote.FuzzyStringMatch
-import com.example.medreminder.data.remote.BadRecordsApi
 import com.example.medreminder.data.remote.GrlsApi
 import com.example.medreminder.data.remote.GrlsRecordDto
+import com.example.medreminder.data.remote.VidalParapharmReferenceDataSource
 import com.example.medreminder.data.remote.WikipediaReferenceDataSource
 import com.example.medreminder.domain.model.DrugReferenceOption
 import com.google.gson.JsonSyntaxException
@@ -24,7 +24,7 @@ data class DrugReferenceListResult(
 
 class DrugReferenceRepository(
     private val grlsApi: GrlsApi,
-    private val badApi: BadRecordsApi,
+    private val vidalParapharm: VidalParapharmReferenceDataSource,
     private val wikipedia: WikipediaReferenceDataSource,
 ) {
     suspend fun fetchDrugReferenceOptions(query: String): DrugReferenceListResult = withContext(Dispatchers.IO) {
@@ -51,7 +51,21 @@ class DrugReferenceRepository(
         if (trimmed.isBlank()) {
             throw IllegalArgumentException("Введите название БАД для поиска")
         }
-        fetchOptionsFromBadRegistry(trimmed)
+        val hits = try {
+            vidalParapharm.searchParapharm(trimmed)
+        } catch (e: IOException) {
+            throw IOException("Vidal.ru: ${e.message ?: "нет связи"}", e)
+        }
+        if (hits.isEmpty()) {
+            throw NoSuchElementException("По запросу «$trimmed» в справочнике Vidal (БАД) ничего не найдено")
+        }
+        val options = hits.take(10).map { hit -> vidalParapharm.toOption(hit) }
+        DrugReferenceListResult(
+            query = trimmed,
+            options = options,
+            sourceLabel = VidalParapharmReferenceDataSource.VIDAL_SOURCE_LABEL,
+            notice = "Поиск по разделу «Парафармацевтика / БАД» на vidal.ru.",
+        )
     }
 
     /** Википедия — только если медсправочник (ГРЛС) недоступен, не при «ничего не найдено». */
@@ -63,48 +77,53 @@ class DrugReferenceRepository(
             is IOException -> true
             is HttpException -> error.code() in 500..599 ||
                 error.code() == 408 ||
-                error.code() == 429
+                error.code() == 429 ||
+                error.code() == 502 ||
+                error.code() == 503 ||
+                error.code() == 504
             else -> false
         }
 
     private suspend fun fetchOptionsFromGrls(trimmed: String): DrugReferenceListResult {
-        val queries = DrugSearchQueryExpander.expand(trimmed)
+        val queries = buildGrlsSearchQueries(trimmed)
         val merged = linkedMapOf<String, GrlsRecordDto>()
         var lastError: Exception? = null
         for (q in queries) {
             try {
-                val response = grlsApi.search(q, limit = 20)
+                val response = grlsApi.search(q, limit = GRLS_PAGE_LIMIT)
                 for (item in response.items.orEmpty()) {
                     val key = recordKey(item)
                     if (key != null) merged.putIfAbsent(key, item)
                 }
             } catch (e: Exception) {
-                lastError = when (e) {
-                    is HttpException -> IOException("ГРЛС: ошибка сервера ${e.code()}", e)
-                    is SocketTimeoutException -> IOException("ГРЛС: превышено время ожидания", e)
-                    is UnknownHostException -> IOException("Нет доступа к интернету или DNS", e)
-                    is IOException -> IOException(e.message ?: "ГРЛС: нет связи с сервером", e)
-                    is JsonSyntaxException -> IOException("ГРЛС: неверный формат ответа", e)
-                    else -> IOException(e.message ?: "ГРЛС: ошибка запроса", e)
-                }
+                lastError = mapGrlsIOException(e)
             }
         }
         if (merged.isEmpty()) {
             throw lastError ?: NoSuchElementException("По запросу «$trimmed» в ГРЛС ничего не найдено")
         }
-        val ranked = merged.values
-            .map { record -> record to scoreRecord(record, trimmed) }
-            .filter { (_, score) -> score <= MAX_ACCEPT_RANK }
-            .sortedBy { (_, score) -> score }
+        var ranked = rankRecords(merged.values, trimmed, MAX_ACCEPT_RANK)
+        var relaxedNotice: String? = null
         if (ranked.isEmpty()) {
-            throw NoSuchElementException("По запросу «$trimmed» нет подходящих совпадений в ГРЛС")
+            ranked = rankRecords(merged.values, trimmed, MAX_ACCEPT_RANK_RELAXED)
+            if (ranked.isNotEmpty()) {
+                relaxedNotice = "Показаны близкие совпадения — проверьте название в списке."
+            }
+        }
+        if (ranked.isEmpty()) {
+            ranked = merged.values
+                .map { record -> record to scoreRecord(record, trimmed) }
+                .sortedBy { (_, score) -> score }
+                .take(10)
+            relaxedNotice = "Точного совпадения нет — показаны ближайшие записи из ГРЛС."
         }
         val options = ranked.take(10).map { (record, _) -> record.toOption() }
-        val notice = if (queries.size > 1 && queries.first() != trimmed) {
+        val expandNotice = if (queries.size > 1 && queries.first() != trimmed) {
             "Показаны результаты с учётом похожих вариантов написания."
         } else {
             null
         }
+        val notice = listOfNotNull(expandNotice, relaxedNotice).joinToString(" ").ifBlank { null }
         return DrugReferenceListResult(
             query = trimmed,
             options = options,
@@ -113,50 +132,19 @@ class DrugReferenceRepository(
         )
     }
 
-    private suspend fun fetchOptionsFromBadRegistry(trimmed: String): DrugReferenceListResult {
-        val queries = DrugSearchQueryExpander.expand(trimmed)
-        val merged = linkedMapOf<String, GrlsRecordDto>()
-        var lastError: Exception? = null
-        for (q in queries) {
-            try {
-                val response = badApi.search(q, limit = 20)
-                for (item in response.items.orEmpty()) {
-                    val key = recordKey(item)
-                    if (key != null) merged.putIfAbsent(key, item)
-                }
-            } catch (e: Exception) {
-                lastError = when (e) {
-                    is HttpException -> IOException("Реестр БАД: ошибка сервера ${e.code()}", e)
-                    is SocketTimeoutException -> IOException("Реестр БАД: превышено время ожидания", e)
-                    is UnknownHostException -> IOException("Нет доступа к интернету или DNS", e)
-                    is IOException -> IOException(e.message ?: "Реестр БАД: нет связи с сервером", e)
-                    is JsonSyntaxException -> IOException("Реестр БАД: неверный формат ответа", e)
-                    else -> IOException(e.message ?: "Реестр БАД: ошибка запроса", e)
-                }
+    private suspend fun buildGrlsSearchQueries(trimmed: String): List<String> {
+        val queries = linkedSetOf<String>()
+        queries.addAll(DrugSearchQueryExpander.expand(trimmed))
+        try {
+            val suggestions = grlsApi.suggestions(trimmed.take(60))
+            for (item in suggestions.items.orEmpty()) {
+                val text = item.trim()
+                if (text.length >= 2) queries += text
             }
+        } catch (_: Exception) {
+            // подсказки необязательны
         }
-        if (merged.isEmpty()) {
-            throw lastError ?: NoSuchElementException("По запросу «$trimmed» в реестре БАД ничего не найдено")
-        }
-        val ranked = merged.values
-            .map { record -> record to scoreRecord(record, trimmed) }
-            .filter { (_, score) -> score <= MAX_ACCEPT_RANK }
-            .sortedBy { (_, score) -> score }
-        if (ranked.isEmpty()) {
-            throw NoSuchElementException("По запросу «$trimmed» нет подходящих совпадений в реестре БАД")
-        }
-        val options = ranked.take(10).map { (record, _) -> record.toBadOption() }
-        val notice = if (queries.size > 1 && queries.first() != trimmed) {
-            "Показаны результаты с учётом похожих вариантов написания."
-        } else {
-            null
-        }
-        return DrugReferenceListResult(
-            query = trimmed,
-            options = options,
-            sourceLabel = BAD_SOURCE_LABEL,
-            notice = notice,
-        )
+        return queries.take(12).toList()
     }
 
     private suspend fun fetchOptionsFromWikipedia(
@@ -191,6 +179,16 @@ class DrugReferenceRepository(
         )
     }
 
+    private fun rankRecords(
+        records: Collection<GrlsRecordDto>,
+        query: String,
+        maxRank: Int,
+    ): List<Pair<GrlsRecordDto, Int>> =
+        records
+            .map { record -> record to scoreRecord(record, query) }
+            .filter { (_, score) -> score <= maxRank }
+            .sortedBy { (_, score) -> score }
+
     private fun recordKey(record: GrlsRecordDto): String? {
         val id = record.id?.toString()
         if (!id.isNullOrBlank()) return "id:$id"
@@ -201,9 +199,8 @@ class DrugReferenceRepository(
         return null
     }
 
-    private fun GrlsRecordDto.toOption(): DrugReferenceOption = toRegistryOption("grls", GRLS_SOURCE_LABEL)
-
-    private fun GrlsRecordDto.toBadOption(): DrugReferenceOption = toRegistryOption("bad", BAD_SOURCE_LABEL)
+    private fun GrlsRecordDto.toOption(): DrugReferenceOption =
+        toRegistryOption("grls", GRLS_SOURCE_LABEL)
 
     private fun GrlsRecordDto.toRegistryOption(idPrefix: String, sourceLabel: String): DrugReferenceOption {
         val recordId = id ?: registrationNumber?.hashCode()?.toLong() ?: tradeName.hashCode().toLong()
@@ -219,6 +216,16 @@ class DrugReferenceRepository(
         )
     }
 
+    private fun mapGrlsIOException(e: Exception): IOException =
+        when (e) {
+            is HttpException -> IOException("ГРЛС: ошибка сервера ${e.code()}", e)
+            is SocketTimeoutException -> IOException("ГРЛС: превышено время ожидания", e)
+            is UnknownHostException -> IOException("Нет доступа к интернету или DNS", e)
+            is IOException -> IOException(e.message ?: "ГРЛС: нет связи с сервером", e)
+            is JsonSyntaxException -> IOException("ГРЛС: неверный формат ответа", e)
+            else -> IOException(e.message ?: "ГРЛС: ошибка запроса", e)
+        }
+
     private fun mapGrlsError(e: Exception): IOException {
         val message = when (e) {
             is IOException -> e.message ?: "Ошибка сети"
@@ -230,12 +237,13 @@ class DrugReferenceRepository(
     private fun scoreRecord(record: GrlsRecordDto, query: String): Int {
         val trade = record.tradeName.orEmpty()
         val inn = record.innName.orEmpty()
-        val fuzzy = FuzzyStringMatch.bestScore(query, listOf(trade, inn))
+        val reg = record.registrationNumber.orEmpty()
+        val fuzzy = FuzzyStringMatch.bestScore(query, listOf(trade, inn, reg))
         var score = ((1.0 - fuzzy) * 100).toInt()
         val status = record.status.orEmpty()
         if (status.startsWith("Действ")) score -= 8
         if (status.contains("Исключ") || status.contains("Истёк")) score += 12
-        if (fuzzy < 0.42) score += 200
+        if (fuzzy < 0.35) score += 160
         return score
     }
 
@@ -248,9 +256,10 @@ class DrugReferenceRepository(
     }
 
     companion object {
+        private const val GRLS_PAGE_LIMIT = 50
         private const val MAX_ACCEPT_RANK = 95
-        const val GRLS_SOURCE_LABEL = "ГРЛС (Минздрав РФ), данные pharmcontrol.ru"
-        const val BAD_SOURCE_LABEL = "Реестр зарегистрированных БАД, данные pharmcontrol.ru"
+        private const val MAX_ACCEPT_RANK_RELAXED = 120
+        const val GRLS_SOURCE_LABEL = "ГРЛС (Минздрав РФ), API pharmcontrol.ru"
         const val WIKI_SOURCE_LABEL = "Википедия (рус.)"
     }
 }

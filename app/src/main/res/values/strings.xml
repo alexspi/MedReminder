@@ -48,13 +48,13 @@
     <string name="course_kind_medication">Приём лекарства</string>
     <string name="course_kind_medication_desc">Курс с дозировкой, остатками и справкой из ГРЛС</string>
     <string name="course_kind_supplement">Приём БАД / витаминов</string>
-    <string name="course_kind_supplement_desc">Как у лекарств, поиск по реестру зарегистрированных БАД</string>
+    <string name="course_kind_supplement_desc">Как у лекарств, справка из раздела БАД на vidal.ru</string>
     <string name="course_kind_planned_action">Запланировать действие</string>
     <string name="course_kind_planned_action_desc">Напоминание без дозировки, остатков и справки из реестра</string>
     <string name="field_action_name">Название действия</string>
     <string name="field_supplement_name">Название БАД</string>
     <string name="field_times_action">Время</string>
-    <string name="bad_section_title">Справка из реестра БАД</string>
+    <string name="bad_section_title">Справка Vidal (БАД / витамины)</string>
     <string name="field_name">Название</string>
     <string name="field_dosage">Дозировка</string>
     <string name="field_units_in_package">Количество в упаковке</string>
